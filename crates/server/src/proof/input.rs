@@ -7,8 +7,9 @@ use alloy_eips::Decodable2718;
 use anyhow::Context;
 use stateless_validator_common::guest::input::PUBLIC_KEY_BYTES;
 use zkboost_types::{
-    ExecutionWitness, Hash256, HashTreeRoot, NewPayloadRequest, NewPayloadRequestExt, ProtocolFork,
-    PublicKeys, Sha2Hasher, SszEncode, StatelessValidationResult, Transactions,
+    BeaconStateWitness, ExecutionWitness, Hash256, HashTreeRoot, NewPayloadRequest,
+    NewPayloadRequestExt, ProtocolFork, PublicKeys, Sha2Hasher, SszEncode,
+    StatelessValidationResult, Transactions,
 };
 
 /// The metadata of a `NewPayloadRequest`, known before the witness. The root identifies the
@@ -54,6 +55,7 @@ pub(crate) struct StatelessInput {
     payload_meta: NewPayloadRequestMeta,
     stateless_input_bytes: Vec<u8>,
     stateless_output_bytes: Vec<u8>,
+    beacon_state_witness: Option<BeaconStateWitness>,
 }
 
 impl StatelessInput {
@@ -88,7 +90,23 @@ impl StatelessInput {
             payload_meta,
             stateless_input_bytes,
             stateless_output_bytes,
+            beacon_state_witness: None,
         })
+    }
+
+    /// Attaches the beacon state witness of the beacon block that carries the payload.
+    pub(crate) fn with_beacon_state_witness(
+        mut self,
+        beacon_state_witness: Option<BeaconStateWitness>,
+    ) -> Self {
+        self.beacon_state_witness = beacon_state_witness;
+        self
+    }
+
+    /// Returns the beacon state witness of the payload. The EIP-8025 guests read the
+    /// stateless input alone, so it is absent from the zkVM stdin until a guest reads it.
+    pub(crate) fn beacon_state_witness(&self) -> Option<&BeaconStateWitness> {
+        self.beacon_state_witness.as_ref()
     }
 
     /// Returns the metadata of the request of the input.

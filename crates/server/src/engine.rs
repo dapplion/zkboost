@@ -36,8 +36,8 @@ use tokio_util::sync::CancellationToken;
 use tracing::{Instrument, Span, debug, error, info, info_span, warn};
 use validator::Validator;
 use zkboost_types::{
-    ExecutionWitness, Hash256, NewPayloadParams, NewPayloadRequest, ProgressiveList, ProofType,
-    SszList,
+    BeaconStateWitness, ExecutionWitness, Hash256, NewPayloadParams, NewPayloadRequest,
+    ProgressiveList, ProofType, SszList,
 };
 
 use crate::{
@@ -440,14 +440,25 @@ impl EngineProxyState {
         let protocol_fork = self
             .validator()?
             .protocol_fork(Slot::new(payload_meta.slot))?;
-        let stateless_input = tokio::task::spawn_blocking(move || {
-            let witness = decode_engine_witness(&witness)?;
-            StatelessInput::new(protocol_fork, payload_meta, payload, witness, chain_id)
-        })
-        .await
-        .expect("stateless input construction does not panic")
-        .context("stateless input construction")?;
-        let stateless_input = Arc::new(stateless_input);
+        let (stateless_input, beacon_state_witness) = tokio::join!(
+            tokio::task::spawn_blocking(move || {
+                let witness = decode_engine_witness(&witness)?;
+                StatelessInput::new(protocol_fork, payload_meta, payload, witness, chain_id)
+            }),
+            self.beacon_state_witness(payload_meta, Slot::new(payload_meta.slot)),
+        );
+        let stateless_input = Arc::new(
+            stateless_input
+                .expect("stateless input construction does not panic")
+                .context("stateless input construction")?
+                .with_beacon_state_witness(match beacon_state_witness {
+                    Ok(witness) => Some(witness),
+                    Err(error) => {
+                        warn!(block_hash = %payload_meta.block_hash, error = %format!("{error:#}"), "beacon state witness unavailable");
+                        None
+                    }
+                }),
+        );
 
         for (proof_type, worker_input_tx) in proving {
             let request = (payload_meta.new_payload_request_root, proof_type);
@@ -506,6 +517,51 @@ impl EngineProxyState {
             .remove(&(payload_meta.new_payload_request_root, proof_type));
     }
 
+    /// Returns the beacon state witness of the beacon block that carries a payload. The top-level
+    /// leaves of the state stand in for the state, so the beacon node serves the whole state until
+    /// it serves the leaves.
+    async fn beacon_state_witness(
+        &self,
+        payload_meta: NewPayloadRequestMeta,
+        slot: Slot,
+    ) -> anyhow::Result<BeaconStateWitness> {
+        let beacon_block_root = self.resolve_beacon_block_root(payload_meta, slot).await?;
+        let state_root = self
+            .beacon_node_client
+            .state_root(beacon_block_root)
+            .await?;
+        self.beacon_node_client
+            .beacon_state_witness(state_root, self.validator()?.spec())
+            .await
+    }
+
+    /// Returns the root of the beacon block that carries a payload, as an `execution_payload`
+    /// event announced it or as the children of the parent beacon block root report it.
+    async fn resolve_beacon_block_root(
+        &self,
+        payload_meta: NewPayloadRequestMeta,
+        slot: Slot,
+    ) -> anyhow::Result<B256> {
+        let announced = self
+            .blocks
+            .lock()
+            .unwrap()
+            .get(&(payload_meta.block_hash, slot))
+            .copied();
+        match announced {
+            Some(beacon_block_root) => Ok(beacon_block_root),
+            None => {
+                self.beacon_node_client
+                    .beacon_block_root(
+                        payload_meta.block_hash,
+                        payload_meta.parent_beacon_block_root,
+                        slot,
+                    )
+                    .await
+            }
+        }
+    }
+
     /// Submits a proof to the beacon node in the background, with `SUBMISSION_ATTEMPTS` attempts
     /// `BEACON_NODE_RETRY_DELAY` apart.
     fn submit_proof(
@@ -528,25 +584,8 @@ impl EngineProxyState {
             };
             for attempt in 1..=SUBMISSION_ATTEMPTS {
                 let submission = async {
-                    let announced = state
-                        .blocks
-                        .lock()
-                        .unwrap()
-                        .get(&(payload_meta.block_hash, slot))
-                        .copied();
-                    let beacon_block_root = match announced {
-                        Some(beacon_block_root) => beacon_block_root,
-                        None => {
-                            state
-                                .beacon_node_client
-                                .beacon_block_root(
-                                    payload_meta.block_hash,
-                                    payload_meta.parent_beacon_block_root,
-                                    slot,
-                                )
-                                .await?
-                        }
-                    };
+                    let beacon_block_root =
+                        state.resolve_beacon_block_root(payload_meta, slot).await?;
                     let envelopes = state.validator()?.sign_execution_proofs(
                         beacon_block_root,
                         slot,
