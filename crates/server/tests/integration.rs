@@ -61,6 +61,8 @@ const VALIDATOR_INDEX: u64 = 256;
 const BEACON_BLOCK_ROOT: B256 = B256::repeat_byte(0xbb);
 /// Another child of the parent beacon block, without the fixture payload.
 const OTHER_BLOCK_ROOT: B256 = B256::repeat_byte(0xcc);
+/// The state root of every beacon block of the mock beacon node, which serves no state.
+const STATE_ROOT: B256 = B256::repeat_byte(0xdd);
 const GENESIS_VALIDATORS_ROOT: B256 = B256::repeat_byte(0x99);
 const FORK_VERSION: [u8; 4] = [0x10, 0x00, 0x00, 0x38];
 
@@ -270,9 +272,10 @@ async fn block_handler(
         OTHER_BLOCK_ROOT => B256::ZERO,
         _ => return Err(StatusCode::NOT_FOUND),
     };
-    Ok(Json(json!({ "data": { "message": { "body": {
-        "signed_execution_payload_bid": { "message": { "block_hash": block_hash } }
-    } } } })))
+    Ok(Json(json!({ "data": { "message": {
+        "state_root": STATE_ROOT,
+        "body": { "signed_execution_payload_bid": { "message": { "block_hash": block_hash } } }
+    } } })))
 }
 
 /// `GET /eth/v1/events`, which announces the fixture block under `block_from_event`, and the
