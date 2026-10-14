@@ -82,10 +82,7 @@ pub(crate) async fn run_worker(
         info!(
             block_hash = %payload_meta.block_hash,
             %proof_type,
-            beacon_state_leaves = input
-                .stateless_input
-                .beacon_state_witness()
-                .map_or(0, |witness| witness.leaves.len()),
+            beacon_state_leaves = input.stateless_input.beacon_state_witness().leaves.len(),
             "proving"
         );
 

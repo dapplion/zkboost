@@ -55,7 +55,7 @@ pub(crate) struct StatelessInput {
     payload_meta: NewPayloadRequestMeta,
     stateless_input_bytes: Vec<u8>,
     stateless_output_bytes: Vec<u8>,
-    beacon_state_witness: Option<BeaconStateWitness>,
+    beacon_state_witness: BeaconStateWitness,
 }
 
 impl StatelessInput {
@@ -66,6 +66,7 @@ impl StatelessInput {
         payload_meta: NewPayloadRequestMeta,
         payload: NewPayloadRequest,
         witness: ExecutionWitness,
+        beacon_state_witness: BeaconStateWitness,
         chain_id: u64,
     ) -> anyhow::Result<Self> {
         let public_keys = PublicKeys::from(recover_public_keys(payload.transactions())?);
@@ -90,23 +91,14 @@ impl StatelessInput {
             payload_meta,
             stateless_input_bytes,
             stateless_output_bytes,
-            beacon_state_witness: None,
+            beacon_state_witness,
         })
     }
 
-    /// Attaches the beacon state witness of the beacon block that carries the payload.
-    pub(crate) fn with_beacon_state_witness(
-        mut self,
-        beacon_state_witness: Option<BeaconStateWitness>,
-    ) -> Self {
-        self.beacon_state_witness = beacon_state_witness;
-        self
-    }
-
-    /// Returns the beacon state witness of the payload. The EIP-8025 guests read the
-    /// stateless input alone, so it is absent from the zkVM stdin until a guest reads it.
-    pub(crate) fn beacon_state_witness(&self) -> Option<&BeaconStateWitness> {
-        self.beacon_state_witness.as_ref()
+    /// Returns the beacon state witness of the beacon block that carries the payload. The
+    /// EIP-8025 guests read the stateless input alone, so it is not in the zkVM stdin yet.
+    pub(crate) fn beacon_state_witness(&self) -> &BeaconStateWitness {
+        &self.beacon_state_witness
     }
 
     /// Returns the metadata of the request of the input.
@@ -147,6 +139,8 @@ fn recover_public_keys(transactions: &Transactions) -> anyhow::Result<Vec<[u8; P
 mod tests {
     use std::time::Instant;
 
+    use zkboost_types::{BeaconStateWitness, STATE_FIELD_COUNT};
+
     use crate::proof::input::{NewPayloadRequestMeta, StatelessInput};
 
     /// The stateless input of block 93354 of glamsterdam-devnet-8.
@@ -166,6 +160,7 @@ mod tests {
             NewPayloadRequestMeta::new(&fixture.new_payload_request, Instant::now()).unwrap(),
             fixture.new_payload_request,
             fixture.witness,
+            BeaconStateWitness::new(vec![[0; 32]; STATE_FIELD_COUNT]).unwrap(),
             fixture.chain_id,
         )
         .unwrap();
