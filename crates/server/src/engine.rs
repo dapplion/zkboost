@@ -59,7 +59,7 @@ const BLOCK_CACHE_SLOTS: usize = 64;
 /// Attempts to submit a proof, `BEACON_NODE_RETRY_DELAY` apart, which span less than the 12 second
 /// slot.
 const SUBMISSION_ATTEMPTS: u32 = 5;
-/// Attempts of the beacon state witness reads of a payload, which hold up its proofs.
+/// Attempts of the beacon state witness reads of a payload.
 const WITNESS_ATTEMPTS: u32 = 3;
 
 /// JSON-RPC request envelope.
@@ -523,10 +523,7 @@ impl EngineProxyState {
             .remove(&(payload_meta.new_payload_request_root, proof_type));
     }
 
-    /// Returns the beacon state witness of the beacon block that carries a payload, retried as the
-    /// submission is, since it holds up every proof of the payload. The top-level
-    /// leaves of the state stand in for the state, so the beacon node serves the whole state until
-    /// it serves the leaves.
+    /// Returns the beacon state witness of a payload, retried as the submission is.
     async fn beacon_state_witness(
         &self,
         payload_meta: NewPayloadRequestMeta,
@@ -556,8 +553,7 @@ impl EngineProxyState {
         }
     }
 
-    /// Returns the root of the beacon block that carries a payload, as an `execution_payload`
-    /// event announced it or as the children of the parent beacon block root report it.
+    /// Returns the beacon block root of a payload, from the event cache or the beacon node.
     async fn resolve_beacon_block_root(
         &self,
         payload_meta: NewPayloadRequestMeta,

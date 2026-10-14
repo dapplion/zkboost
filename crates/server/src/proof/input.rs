@@ -95,8 +95,7 @@ impl StatelessInput {
         })
     }
 
-    /// Returns the beacon state witness of the beacon block that carries the payload. The
-    /// EIP-8025 guests read the stateless input alone, so it is not in the zkVM stdin yet.
+    /// Returns the beacon state witness, which is not in the zkVM stdin yet.
     pub(crate) fn beacon_state_witness(&self) -> &BeaconStateWitness {
         &self.beacon_state_witness
     }

@@ -195,15 +195,12 @@ impl BeaconNodeClient {
             .with_context(|| format!("beacon block {root} not found"))
     }
 
-    /// Returns the state root of a beacon block, the root of the state that its payload is
-    /// verified against.
+    /// Returns the state root of a beacon block.
     pub(crate) async fn state_root(&self, block_root: B256) -> anyhow::Result<B256> {
         Ok(self.block(block_root).await?.message.state_root)
     }
 
-    /// Returns the top-level SSZ leaves of a beacon state, the witness of every top-level field.
-    /// The leaves must merkleize to the requested root, so a state of another block is rejected.
-    /// Only a post-Gloas state carries the payload bid that binds a payload to its beacon block.
+    /// Returns the leaves of a post-Gloas beacon state, which must merkleize to its root.
     pub(crate) async fn beacon_state_witness(
         &self,
         state_root: B256,

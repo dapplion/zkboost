@@ -65,8 +65,7 @@ const VALIDATOR_INDEX: u64 = 256;
 const BEACON_BLOCK_ROOT: B256 = B256::repeat_byte(0xbb);
 /// Another child of the parent beacon block, without the fixture payload.
 const OTHER_BLOCK_ROOT: B256 = B256::repeat_byte(0xcc);
-/// The beacon state of every block of the mock beacon node, as SSZ beside the root its leaves
-/// merkleize to. A genesis state upgraded through every fork is the cheapest real Gloas state.
+/// The beacon state of every block of the mock, as SSZ beside the root of its leaves.
 static BEACON_STATE: LazyLock<(Vec<u8>, B256)> = LazyLock::new(|| {
     let state = BeaconState::Gloas(BeaconStateGloas::<MainnetEthSpec> {
         genesis_time: Default::default(),
