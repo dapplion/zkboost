@@ -8,7 +8,7 @@ use std::time::Duration;
 use alloy_primitives::B256;
 use anyhow::{Context, anyhow, bail, ensure};
 use lighthouse_bls::PublicKey;
-use lighthouse_types::{BeaconState, ChainSpec, MainnetEthSpec, Slot};
+use lighthouse_types::{BeaconState, ChainSpec, ForkName, MainnetEthSpec, Slot};
 use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use reqwest_eventsource::{Event, EventSource, retry::Constant};
 use serde::{Deserialize, de::DeserializeOwned};
@@ -203,6 +203,7 @@ impl BeaconNodeClient {
 
     /// Returns the top-level SSZ leaves of a beacon state, the witness of every top-level field.
     /// The leaves must merkleize to the requested root, so a state of another block is rejected.
+    /// Only a post-Gloas state carries the payload bid that binds a payload to its beacon block.
     pub(crate) async fn beacon_state_witness(
         &self,
         state_root: B256,
@@ -217,6 +218,11 @@ impl BeaconNodeClient {
         tokio::task::spawn_blocking(move || {
             let state = BeaconState::<MainnetEthSpec>::from_ssz_bytes(&bytes, &spec)
                 .map_err(|error| anyhow!("beacon state {state_root} not decodable: {error:?}"))?;
+            let fork_name = state.fork_name_unchecked();
+            ensure!(
+                fork_name >= ForkName::Gloas,
+                "beacon state {state_root} is under {fork_name}, which has no payload bid"
+            );
             let witness = BeaconStateWitness::new(
                 state
                     .get_beacon_state_leaves()
